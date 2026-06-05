@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMRT Train Explorer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: linear-gradient(135deg, #161b22 0%, #1f2937 100%);
+    border-bottom: 2px solid #30363d;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.5px; }
+  .line-badge {
+    display: inline-block; padding: 3px 10px;
+    border-radius: 12px; font-size: 0.75rem; font-weight: 700;
+  }
+  .nel-badge { background: #9B26B6; color: #fff; }
+  .ccl-badge { background: #F5971D; color: #fff; }
+
+  main { display: flex; flex: 1; }
+
+  /* MAP PANEL */
+  .map-panel {
+    flex: 1 1 580px; min-width: 320px;
+    background: #0d1117;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 16px 6px 16px 16px;
+  }
+  #mapSvg { width: 100%; max-width: 570px; height: auto; display: block; }
+
+  /* CONTROL PANEL */
+  .ctrl-panel {
+    flex: 0 0 310px;
+    background: #161b22;
+    border-left: 1px solid #30363d;
+    padding: 20px 18px;
+    display: flex; flex-direction: column; gap: 16px;
+    overflow-y: auto;
+  }
+
+  .section-title {
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    color: #8b949e; margin-bottom: 7px;
+  }
+
+  /* Junction picker */
+  .jct-picker { display: flex; gap: 8px; }
+  .jct-btn {
+    flex: 1; padding: 9px 0;
+    border: 2px solid #30363d; background: #0d1117;
+    color: #8b949e; border-radius: 8px;
+    font-size: 0.95rem; font-weight: 700; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .jct-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+  .jct-btn.active { border-color: #58a6ff; background: #1a2840; color: #58a6ff; }
+  .jct-desc { font-size: 0.73rem; color: #6e7681; margin-top: 5px; }
+
+  /* Route dropdowns */
+  .route-builder { display: flex; flex-direction: column; gap: 8px; }
+  .dd-row { display: flex; flex-direction: column; gap: 3px; }
+  .dd-row label {
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; color: #8b949e;
+  }
+  .dd-row.nel-dd label { color: #c77dff; }
+  .dd-row.ccl-dd label { color: #ffb347; }
+
+  select {
+    width: 100%; padding: 8px 10px;
+    background: #0d1117; border: 1.5px solid #30363d;
+    border-radius: 8px; color: #e6edf3;
+    font-size: 0.85rem; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  select:focus { outline: none; border-color: #58a6ff; }
+  select.nel-sel { border-color: #6a0dad; }
+  select.nel-sel:focus { border-color: #9B26B6; }
+  select.ccl-sel { border-color: #a85800; }
+  select.ccl-sel:focus { border-color: #F5971D; }
+
+  .swap-row { display: flex; justify-content: center; margin-top: 6px; }
+  .swap-btn {
+    background: #1f2937; border: 1.5px solid #30363d;
+    color: #8b949e; border-radius: 8px; padding: 6px 18px;
+    cursor: pointer; font-size: 1rem; transition: all 0.15s;
+  }
+  .swap-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+  /* Buttons */
+  .controls { display: flex; gap: 7px; }
+  .btn {
+    flex: 1; padding: 10px 0; border: none; border-radius: 9px;
+    font-size: 0.92rem; font-weight: 700; cursor: pointer;
+    transition: all 0.15s; letter-spacing: 0.3px;
+  }
+  .btn-start { background: #238636; color: #fff; }
+  .btn-start:hover { background: #2ea043; }
+  .btn-start:disabled { background: #1a3d20; color: #3d6042; cursor: not-allowed; }
+  .btn-stop { background: #b91c1c; color: #fff; }
+  .btn-stop:hover { background: #dc2626; }
+  .btn-stop:disabled { background: #3d1515; color: #5e2222; cursor: not-allowed; }
+  .btn-reset { background: #21262d; color: #8b949e; border: 1.5px solid #30363d; flex: 0 0 42px; }
+  .btn-reset:hover { background: #30363d; color: #e6edf3; }
+
+  /* Info card */
+  .info-card {
+    background: #0d1117; border: 1px solid #30363d;
+    border-radius: 10px; padding: 12px;
+    font-size: 0.83rem; line-height: 1.6; min-height: 72px;
+  }
+  .info-card .stn-name { font-size: 1rem; font-weight: 700; color: #e6edf3; }
+  .info-card .stn-code { font-size: 0.72rem; color: #8b949e; }
+  .info-card .stn-status { color: #8b949e; font-size: 0.8rem; }
+
+  /* Progress */
+  .progress-outer { background: #21262d; border-radius: 4px; height: 6px; overflow: hidden; }
+  .progress-inner { height: 100%; border-radius: 4px; transition: width 0.35s, background 0.35s; background: #9B26B6; }
+
+  /* Route summary */
+  .route-summary { font-size: 0.78rem; color: #6e7681; line-height: 1.55; }
+  .route-summary .seg-nel { color: #c77dff; font-weight: 600; }
+  .route-summary .seg-ccl { color: #ffb347; font-weight: 600; }
+  .route-summary .seg-arrow { color: #6e7681; }
+
+  /* SVG track styles */
+  .track-nel { fill: none; stroke: #9B26B6; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+  .track-ccl { fill: none; stroke: #F5971D; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+  .track-hl  { fill: none; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round;
+               filter: drop-shadow(0 0 5px currentColor); opacity: 0.92; }
+  .stn-dot   { stroke-width: 2.5; }
+  .stn-label { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9px; fill: #c9d1d9; pointer-events: none; }
+  .stn-code  { font-family: 'Segoe UI', Arial, sans-serif; font-size: 7px; fill: #7a8490; pointer-events: none; }
+  #trainEmoji { font-size: 18px; user-select: none; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:1.8rem;">🚇</span>
+  <h1>SMRT Train Explorer</h1>
+  <span class="line-badge nel-badge">NEL</span>
+  <span class="line-badge ccl-badge">CCL</span>
+</header>
+
+<main>
+  <!-- ── MAP ── -->
+  <div class="map-panel">
+    <svg id="mapSvg" viewBox="0 0 570 660" xmlns="http://www.w3.org/2000/svg">
+      <g id="routeHL"></g>
+      <polyline id="nelTrack" class="track-nel" points=""/>
+      <polyline id="cclTrack" class="track-ccl" points=""/>
+      <polyline id="spurTrack" class="track-ccl" points=""/>
+      <g id="stationDots"></g>
+      <g id="stationLabels"></g>
+      <text id="trainEmoji" x="0" y="0" text-anchor="middle" dominant-baseline="central">🚆</text>
+    </svg>
+  </div>
+
+  <!-- ── CONTROLS ── -->
+  <div class="ctrl-panel">
+
+    <div>
+      <div class="section-title">Junctions</div>
+      <div class="jct-picker">
+        <button class="jct-btn active" data-jct="0" onclick="setJunctions(0)">0</button>
+        <button class="jct-btn"        data-jct="1" onclick="setJunctions(1)">1</button>
+        <button class="jct-btn"        data-jct="2" onclick="setJunctions(2)">2</button>
+      </div>
+      <div class="jct-desc" id="jctDesc">Direct route — no line change</div>
+    </div>
+
+    <div>
+      <div class="section-title">Route</div>
+      <div class="route-builder" id="routeBuilder"></div>
+      <div class="swap-row">
+        <button class="swap-btn" onclick="swapRoute()">⇆ Swap</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-start" id="btnStart" onclick="startTrain()">▶ Start</button>
+      <button class="btn btn-stop"  id="btnStop"  onclick="stopTrain()" disabled>⏹ Stop</button>
+      <button class="btn btn-reset" onclick="resetTrain()">↺</button>
+    </div>
+
+    <div>
+      <div class="section-title">Now at</div>
+      <div class="info-card" id="infoCard">
+        <div class="stn-name" id="infoName">—</div>
+        <div class="stn-code" id="infoCode"></div>
+        <div class="stn-status" id="infoStatus">Select a route and press Start</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="progress-outer">
+        <div class="progress-inner" id="progressBar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Route Summary</div>
+      <div class="route-summary" id="routeSummary">—</div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+// ═══════════════════════════════════════════
+// STATION DATA
+// ═══════════════════════════════════════════
+const NEL_STATIONS = [
+  { code:'NE1',  name:'HarbourFront',  x:146, y:618, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE3',  name:'Outram Park',   x:164, y:582, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE4',  name:'Chinatown',     x:178, y:556, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE5',  name:'Clarke Quay',   x:188, y:530, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE6',  name:'Dhoby Ghaut',   x:200, y:504, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE7',  name:'Little India',  x:216, y:474, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE8',  name:'Farrer Park',   x:236, y:442, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE9',  name:'Boon Keng',     x:258, y:408, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE10', name:'Potong Pasir',  x:282, y:372, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE11', name:'Woodleigh',     x:306, y:336, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE12', name:'Serangoon',     x:334, y:296, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE13', name:'Kovan',         x:362, y:254, lx:-9, ly: 4,  la:'end'   },
+  { code:'NE14', name:'Hougang',       x:392, y:210, lx: 9, ly: 4,  la:'start' },
+  { code:'NE15', name:'Buangkok',      x:416, y:170, lx: 9, ly: 4,  la:'start' },
+  { code:'NE16', name:'Sengkang',      x:440, y:128, lx: 9, ly: 4,  la:'start' },
+  { code:'NE17', name:'Punggol',       x:464, y: 86, lx: 9, ly: 4,  la:'start' },
+  { code:'NE18', name:'Punggol Coast', x:488, y: 44, lx: 9, ly: 4,  la:'start' },
+];
+
+const CCL_STATIONS = [
+  { code:'CC1',  name:'Dhoby Ghaut',     x:200, y:504, lx: -9, ly:  4, la:'end'    },
+  { code:'CC2',  name:'Bras Basah',      x:244, y:502, lx:  0, ly: 14, la:'middle' },
+  { code:'CC3',  name:'Esplanade',       x:292, y:516, lx:  0, ly: 14, la:'middle' },
+  { code:'CC4',  name:'Promenade',       x:338, y:514, lx:  0, ly: 14, la:'middle' },
+  { code:'CC5',  name:'Nicoll Highway',  x:380, y:502, lx:  0, ly: 14, la:'middle' },
+  { code:'CC6',  name:'Stadium',         x:420, y:484, lx:  9, ly:  4, la:'start'  },
+  { code:'CC7',  name:'Mountbatten',     x:454, y:464, lx:  9, ly:  4, la:'start'  },
+  { code:'CC8',  name:'Dakota',          x:482, y:444, lx:  9, ly:  4, la:'start'  },
+  { code:'CC9',  name:'Paya Lebar',      x:504, y:420, lx:  9, ly:  4, la:'start'  },
+  { code:'CC10', name:'MacPherson',      x:490, y:390, lx:  9, ly:  4, la:'start'  },
+  { code:'CC11', name:'Tai Seng',        x:462, y:354, lx:  9, ly:  4, la:'start'  },
+  { code:'CC12', name:'Bartley',         x:430, y:318, lx:  9, ly:  4, la:'start'  },
+  { code:'CC13', name:'Serangoon',       x:334, y:296, lx:  0, ly:-13, la:'middle' },
+  { code:'CC14', name:'Lorong Chuan',    x:298, y:282, lx:  0, ly:-13, la:'middle' },
+  { code:'CC15', name:'Bishan',          x:254, y:278, lx:  0, ly:-13, la:'middle' },
+  { code:'CC16', name:'Marymount',       x:206, y:286, lx:  0, ly:-13, la:'middle' },
+  { code:'CC17', name:'Caldecott',       x:184, y:330, lx: -9, ly:  4, la:'end'    },
+  { code:'CC19', name:'Botanic Gardens', x:150, y:372, lx: -9, ly:  4, la:'end'    },
+  { code:'CC20', name:'Farrer Road',     x:118, y:406, lx: -9, ly:  4, la:'end'    },
+  { code:'CC21', name:'Holland Village', x: 86, y:442, lx: -9, ly:  4, la:'end'    },
+  { code:'CC22', name:'Buona Vista',     x: 62, y:472, lx:  9, ly:  4, la:'start'  },
+  { code:'CC23', name:'one-north',       x: 50, y:502, lx:  9, ly:  4, la:'start'  },
+  { code:'CC24', name:'Kent Ridge',      x: 44, y:534, lx:  9, ly:  4, la:'start'  },
+  { code:'CC25', name:'Haw Par Villa',   x: 44, y:566, lx:  9, ly:  4, la:'start'  },
+  { code:'CC26', name:'Pasir Panjang',   x: 72, y:598, lx:  0, ly: 14, la:'middle' },
+  { code:'CC27', name:'Labrador Park',   x:108, y:616, lx:  0, ly: 14, la:'middle' },
+  { code:'CC28', name:'Telok Blangah',   x:136, y:612, lx:  0, ly: 14, la:'middle' },
+  { code:'CC29', name:'HarbourFront',    x:146, y:618, lx: -9, ly: 16, la:'end'    },
+];
+
+// Marina Bay spur: branches off CC4 Promenade → CE1 Bayfront → CE2 Marina Bay
+const SPUR_STATIONS = [
+  { code:'CC4', name:'Promenade',  x:338, y:514 },
+  { code:'CE1', name:'Bayfront',   x:316, y:548, lx: 9, ly: 4,  la:'start'  },
+  { code:'CE2', name:'Marina Bay', x:280, y:572, lx: 0, ly: 14, la:'middle' },
+];
+const SPUR_CODES = new Set(['CE1','CE2']);
+
+const INTERCHANGES = [
+  { name:'HarbourFront', nel:'NE1',  ccl:'CC29', x:146, y:618, lx:-12, ly:  6, la:'end'    },
+  { name:'Dhoby Ghaut',  nel:'NE6',  ccl:'CC1',  x:200, y:504, lx:-12, ly:  6, la:'end'    },
+  { name:'Serangoon',    nel:'NE12', ccl:'CC13', x:334, y:296, lx:  0, ly:-14, la:'middle' },
+];
+
+// Code → station data lookup
+const ST = {};
+NEL_STATIONS.forEach(s => { ST[s.code] = { ...s, line:'NEL' }; });
+CCL_STATIONS.forEach(s => { if (!ST[s.code]) ST[s.code] = { ...s, line:'CCL' }; });
+SPUR_STATIONS.slice(1).forEach(s => { ST[s.code] = { ...s, line:'CCL' }; });
+
+const IC_CODES = new Set(['NE1','CC29','NE6','CC1','NE12','CC13']);
+const PARTNER  = { NE1:'CC29', CC29:'NE1', NE6:'CC1', CC1:'NE6', NE12:'CC13', CC13:'NE12' };
+
+const NEL_COLOR = '#9B26B6';
+const CCL_COLOR = '#F5971D';
+const MOVE_MS     = 1400;
+const DWELL_MS    = 1800;
+const TRANSFER_MS = 2800;
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let junctionCount = 0;
+let fromCode = 'NE1';
+let j1Code   = 'NE6';
+let j2Code   = 'CC13';
+let toCode   = 'NE18';
+
+let route    = [];
+let trainPos = 0;
+let running  = false;
+let phase    = 'at_station';
+let timer    = null;
+let audioCtx = null;
+
+// ═══════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════
+function getLine(code) {
+  return NEL_STATIONS.find(s => s.code === code) ? 'NEL' : 'CCL';
+}
+function otherLine(line) { return line === 'NEL' ? 'CCL' : 'NEL'; }
+// For dropdowns, CCL includes the spur stations
+function getStations(line) {
+  if (line === 'NEL') return NEL_STATIONS;
+  return [...CCL_STATIONS, ...SPUR_STATIONS.slice(1)];
+}
+
+function computeMainCCLSegment(fromC, toC) {
+  const arr = CCL_STATIONS;
+  const fi = arr.findIndex(s => s.code === fromC);
+  const ti = arr.findIndex(s => s.code === toC);
+  if (fi < 0 || ti < 0) return [];
+  if (fi <= ti) return arr.slice(fi, ti + 1);
+  return arr.slice(ti, fi + 1).reverse();
+}
+
+function computeSegmentWithSpur(fromC, toC) {
+  const fromSpur = SPUR_CODES.has(fromC);
+  const toSpur   = SPUR_CODES.has(toC);
+  // Both on spur
+  if (fromSpur && toSpur) {
+    const fi = SPUR_STATIONS.findIndex(s => s.code === fromC);
+    const ti = SPUR_STATIONS.findIndex(s => s.code === toC);
+    if (fi <= ti) return SPUR_STATIONS.slice(fi, ti + 1);
+    return SPUR_STATIONS.slice(ti, fi + 1).reverse();
+  }
+  // FROM is spur → walk back to CC4, then main CCL to toC
+  if (fromSpur) {
+    const fi = SPUR_STATIONS.findIndex(s => s.code === fromC);
+    const spurPart = SPUR_STATIONS.slice(0, fi + 1).reverse(); // CE_n…CC4
+    const mainPart = computeMainCCLSegment('CC4', toC).slice(1);
+    return [...spurPart, ...mainPart];
+  }
+  // TO is spur → main CCL to CC4, then spur to toC
+  const ti = SPUR_STATIONS.findIndex(s => s.code === toC);
+  const mainPart = computeMainCCLSegment(fromC, 'CC4');
+  const spurPart = SPUR_STATIONS.slice(1, ti + 1); // CE1…CE_n (skip CC4)
+  return [...mainPart, ...spurPart];
+}
+
+function computeSegment(line, fromC, toC) {
+  if (line === 'CCL' && (SPUR_CODES.has(fromC) || SPUR_CODES.has(toC))) {
+    return computeSegmentWithSpur(fromC, toC);
+  }
+  const arr = line === 'NEL' ? NEL_STATIONS : CCL_STATIONS;
+  const fi = arr.findIndex(s => s.code === fromC);
+  const ti = arr.findIndex(s => s.code === toC);
+  if (fi < 0 || ti < 0) return [];
+  if (fi <= ti) return arr.slice(fi, ti + 1);
+  return arr.slice(ti, fi + 1).reverse();
+}
+
+function getInterchangeCodesOnLine(line) {
+  return INTERCHANGES.map(ic => line === 'NEL' ? ic.nel : ic.ccl);
+}
+
+function getFinalLine() {
+  if (junctionCount === 0) return getLine(fromCode);
+  if (junctionCount === 1) return j1Code ? otherLine(getLine(fromCode)) : getLine(fromCode);
+  return getLine(fromCode);
+}
+
+// ═══════════════════════════════════════════
+// ROUTE COMPUTATION
+// ═══════════════════════════════════════════
+function computeRoute() {
+  const line1 = getLine(fromCode);
+
+  if (junctionCount === 0) {
+    const seg = computeSegment(line1, fromCode, toCode);
+    return seg.map((s, i) => ({
+      code: s.code, name: s.name, x: s.x, y: s.y,
+      line: line1, isTransfer: false, isEnd: i === seg.length - 1
+    }));
+  }
+
+  if (junctionCount === 1) {
+    const line2 = otherLine(line1);
+    const j1p   = PARTNER[j1Code];
+    const seg1  = computeSegment(line1, fromCode, j1Code);
+    const seg2  = computeSegment(line2, j1p, toCode);
+    const r = seg1.map((s, i) => ({
+      code: s.code, name: s.name, x: s.x, y: s.y,
+      line: line1, isTransfer: i === seg1.length - 1, isEnd: false
+    }));
+    seg2.slice(1).forEach((s, i, a) => r.push({
+      code: s.code, name: s.name, x: s.x, y: s.y,
+      line: line2, isTransfer: false, isEnd: i === a.length - 1
+    }));
+    return r;
+  }
+
+  // 2 junctions
+  const line2 = otherLine(line1);
+  const j1p   = PARTNER[j1Code];
+  const j2p   = PARTNER[j2Code];
+  const seg1  = computeSegment(line1, fromCode, j1Code);
+  const seg2  = computeSegment(line2, j1p, j2Code);
+  const seg3  = computeSegment(line1, j2p, toCode);
+  const r = seg1.map((s, i) => ({
+    code: s.code, name: s.name, x: s.x, y: s.y,
+    line: line1, isTransfer: i === seg1.length - 1, isEnd: false
+  }));
+  const s2sl = seg2.slice(1);
+  s2sl.forEach((s, i) => r.push({
+    code: s.code, name: s.name, x: s.x, y: s.y,
+    line: line2, isTransfer: i === s2sl.length - 1, isEnd: false
+  }));
+  seg3.slice(1).forEach((s, i, a) => r.push({
+    code: s.code, name: s.name, x: s.x, y: s.y,
+    line: line1, isTransfer: false, isEnd: i === a.length - 1
+  }));
+  return r;
+}
+
+// ═══════════════════════════════════════════
+// UI — JUNCTION PICKER
+// ═══════════════════════════════════════════
+const JCT_DESCS = [
+  'Direct route — no line change',
+  '1 junction — change line once',
+  '2 junctions — change line twice'
+];
+
+function setJunctions(n) {
+  junctionCount = n;
+  document.querySelectorAll('.jct-btn').forEach(b => {
+    b.classList.toggle('active', +b.dataset.jct === n);
+  });
+  document.getElementById('jctDesc').textContent = JCT_DESCS[n];
+  if (n === 0) { fromCode='NE1'; toCode='NE18'; }
+  else if (n === 1) { fromCode='NE1'; j1Code='NE6'; toCode='CC29'; }
+  else             { fromCode='NE1'; j1Code='NE6'; j2Code='CC13'; toCode='NE18'; }
+  buildDropdowns();
+  resetTrain();
+}
+
+// ═══════════════════════════════════════════
+// UI — DROPDOWNS
+// ═══════════════════════════════════════════
+function buildDropdowns() {
+  const rb = document.getElementById('routeBuilder');
+  rb.innerHTML = '';
+
+  const line1 = getLine(fromCode);
+
+  // FROM — all stations
+  rb.appendChild(makeDD('FROM', 'from', getAllStationOptions(), fromCode, 'nel-dd', 'nel-sel', onFromChange));
+
+  if (junctionCount >= 1) {
+    const j1opts = getInterchangeCodesOnLine(line1).map(c => ({
+      value: c, label: `${c} · ${ST[c].name}`
+    }));
+    if (!j1opts.find(o => o.value === j1Code)) j1Code = j1opts[0]?.value || '';
+    rb.appendChild(makeDD('JUNCTION 1 — change line', 'j1', j1opts, j1Code, 'nel-dd', 'nel-sel', onJ1Change));
+  }
+
+  if (junctionCount >= 2) {
+    const line2 = otherLine(line1);
+    const j1p   = j1Code ? PARTNER[j1Code] : null;
+    const j2opts = getInterchangeCodesOnLine(line2)
+      .filter(c => c !== j1p)
+      .map(c => ({ value: c, label: `${c} · ${ST[c].name}` }));
+    if (!j2opts.find(o => o.value === j2Code)) j2Code = j2opts[0]?.value || '';
+    rb.appendChild(makeDD('JUNCTION 2 — change line', 'j2', j2opts, j2Code, 'ccl-dd', 'ccl-sel', onJ2Change));
+  }
+
+  // TO — stations on final line
+  const finalLine = getFinalLine();
+  const toOpts = getStations(finalLine).map(s => ({ value: s.code, label: `${s.code} · ${s.name}` }));
+  if (!toOpts.find(o => o.value === toCode)) toCode = toOpts[0]?.value || '';
+  const toCls = finalLine === 'NEL' ? ['nel-dd','nel-sel'] : ['ccl-dd','ccl-sel'];
+  rb.appendChild(makeDD('TO', 'to', toOpts, toCode, toCls[0], toCls[1], onToChange));
+
+  buildRouteSummary();
+}
+
+function getAllStationOptions() {
+  const opts = [];
+  const seen = new Set();
+  NEL_STATIONS.forEach(s => { opts.push({ value: s.code, label: `${s.code} · ${s.name}` }); seen.add(s.name); });
+  CCL_STATIONS.forEach(s => {
+    if (!seen.has(s.name)) opts.push({ value: s.code, label: `${s.code} · ${s.name}` });
+  });
+  SPUR_STATIONS.slice(1).forEach(s => {
+    opts.push({ value: s.code, label: `${s.code} · ${s.name}` });
+  });
+  return opts;
+}
+
+function makeDD(labelText, id, opts, val, rowClass, selClass, onChange) {
+  const div = document.createElement('div');
+  div.className = 'dd-row ' + rowClass;
+  const lbl = document.createElement('label');
+  lbl.textContent = labelText;
+  div.appendChild(lbl);
+  const sel = document.createElement('select');
+  sel.id = 'dd_' + id;
+  sel.className = selClass;
+  opts.forEach(o => {
+    const op = document.createElement('option');
+    op.value = o.value; op.textContent = o.label;
+    if (o.value === val) op.selected = true;
+    sel.appendChild(op);
+  });
+  sel.addEventListener('change', onChange);
+  div.appendChild(sel);
+  return div;
+}
+
+function onFromChange(e) {
+  fromCode = e.target.value;
+  if (junctionCount >= 1) {
+    const ics = getInterchangeCodesOnLine(getLine(fromCode));
+    if (!ics.includes(j1Code)) j1Code = ics[0];
+  }
+  buildDropdowns(); resetTrain();
+}
+function onJ1Change(e) {
+  j1Code = e.target.value;
+  if (junctionCount >= 2) {
+    const line2 = otherLine(getLine(fromCode));
+    const j1p   = PARTNER[j1Code];
+    const valid = getInterchangeCodesOnLine(line2).filter(c => c !== j1p);
+    if (!valid.includes(j2Code)) j2Code = valid[0] || '';
+  }
+  buildDropdowns(); resetTrain();
+}
+function onJ2Change(e) { j2Code = e.target.value; buildDropdowns(); resetTrain(); }
+function onToChange(e)  { toCode = e.target.value; buildRouteSummary(); resetTrain(); }
+
+function swapRoute() {
+  [fromCode, toCode] = [toCode, fromCode];
+  if (junctionCount >= 1) {
+    const ics = getInterchangeCodesOnLine(getLine(fromCode));
+    if (!ics.includes(j1Code)) j1Code = ics[0];
+  }
+  buildDropdowns(); resetTrain();
+}
+
+function buildRouteSummary() {
+  const rs = document.getElementById('routeSummary');
+  const r  = computeRoute();
+  if (!r.length) { rs.textContent = '—'; return; }
+  const stops = r.length - 1;
+  let html = `<span class="seg-${r[0].line.toLowerCase()}">${r[0].code} ${r[0].name}</span>`;
+  html += `<span class="seg-arrow"> ➜ ${stops} stop${stops !== 1 ? 's' : ''} ➜ </span>`;
+  html += `<span class="seg-${r[r.length-1].line.toLowerCase()}">${r[r.length-1].code} ${r[r.length-1].name}</span>`;
+  if (junctionCount > 0) {
+    html += '<br>';
+    r.filter(s => s.isTransfer).forEach(t => {
+      const p = PARTNER[t.code];
+      html += `<span class="seg-arrow">Change at </span>`;
+      html += `<span class="seg-nel">${t.code}</span><span class="seg-arrow">↔</span>`;
+      html += `<span class="seg-ccl">${p}</span>`;
+      html += `<span class="seg-arrow"> (${t.name})</span><br>`;
+    });
+  }
+  rs.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════
+// SVG MAP
+// ═══════════════════════════════════════════
+function svg(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+}
+
+function buildMap() {
+  document.getElementById('nelTrack').setAttribute(
+    'points', NEL_STATIONS.map(s => `${s.x},${s.y}`).join(' ')
+  );
+  document.getElementById('cclTrack').setAttribute(
+    'points', CCL_STATIONS.map(s => `${s.x},${s.y}`).join(' ')
+  );
+  document.getElementById('spurTrack').setAttribute(
+    'points', SPUR_STATIONS.map(s => `${s.x},${s.y}`).join(' ')
+  );
+  buildDots();
+  buildLabels();
+}
+
+function buildDots() {
+  const g = document.getElementById('stationDots');
+  g.innerHTML = '';
+
+  NEL_STATIONS.forEach(s => {
+    if (IC_CODES.has(s.code)) return;
+    g.appendChild(svg('circle', { cx:s.x, cy:s.y, r:5, fill:'#0d1117', stroke:NEL_COLOR, 'stroke-width':2.5 }));
+  });
+
+  CCL_STATIONS.forEach(s => {
+    if (IC_CODES.has(s.code)) return;
+    g.appendChild(svg('circle', { cx:s.x, cy:s.y, r:5, fill:'#0d1117', stroke:CCL_COLOR, 'stroke-width':2.5 }));
+  });
+
+  INTERCHANGES.forEach(ic => {
+    g.appendChild(svg('circle', { cx:ic.x, cy:ic.y, r:9, fill:'#0d1117', stroke:CCL_COLOR, 'stroke-width':3 }));
+    g.appendChild(svg('circle', { cx:ic.x, cy:ic.y, r:5, fill:'#0d1117', stroke:NEL_COLOR, 'stroke-width':2.5 }));
+  });
+
+  // Spur station dots (CE1, CE2)
+  SPUR_STATIONS.slice(1).forEach(s => {
+    g.appendChild(svg('circle', { cx:s.x, cy:s.y, r:5, fill:'#0d1117', stroke:CCL_COLOR, 'stroke-width':2.5 }));
+  });
+}
+
+function buildLabels() {
+  const g = document.getElementById('stationLabels');
+  g.innerHTML = '';
+  const rendered = new Set();
+
+  function addLabel(name, x, y, lx, ly, la, mainCode, altCode) {
+    if (rendered.has(name)) return;
+    rendered.add(name);
+    const anchor = la === 'end' ? 'end' : la === 'start' ? 'start' : 'middle';
+    const lbl = svg('text', { x: x+lx, y: y+ly, 'text-anchor': anchor, 'class':'stn-label' });
+    lbl.textContent = name;
+    g.appendChild(lbl);
+    const cd = svg('text', { x: x+lx, y: y+ly+10, 'text-anchor': anchor, 'class':'stn-code' });
+    cd.textContent = altCode ? `${mainCode}/${altCode}` : mainCode;
+    g.appendChild(cd);
+  }
+
+  NEL_STATIONS.forEach(s => {
+    const ic = INTERCHANGES.find(i => i.nel === s.code);
+    if (ic) {
+      addLabel(ic.name, ic.x, ic.y, ic.lx, ic.ly, ic.la, ic.nel, ic.ccl);
+    } else {
+      addLabel(s.name, s.x, s.y, s.lx, s.ly, s.la, s.code, null);
+    }
+  });
+
+  CCL_STATIONS.forEach(s => {
+    if (!IC_CODES.has(s.code)) {
+      addLabel(s.name, s.x, s.y, s.lx, s.ly, s.la, s.code, null);
+    }
+  });
+
+  // Spur labels (CE1, CE2)
+  SPUR_STATIONS.slice(1).forEach(s => {
+    addLabel(s.name, s.x, s.y, s.lx, s.ly, s.la, s.code, null);
+  });
+}
+
+function drawRouteHighlight() {
+  const hl = document.getElementById('routeHL');
+  hl.innerHTML = '';
+  if (!route.length) return;
+
+  let segStart = 0;
+  for (let i = 1; i <= route.length; i++) {
+    const ended = i === route.length || route[i - 1].isTransfer;
+    if (ended) {
+      const seg = route.slice(segStart, i);
+      const col = seg[0].line === 'NEL' ? NEL_COLOR : CCL_COLOR;
+      const pl = svg('polyline', {
+        points: seg.map(s => `${s.x},${s.y}`).join(' '),
+        stroke: col, fill: 'none',
+        'stroke-width': 7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+        opacity: 0.9, filter: `drop-shadow(0 0 5px ${col})`
+      });
+      hl.appendChild(pl);
+      if (i < route.length && route[i - 1].isTransfer) segStart = i - 1;
+      else segStart = i;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
+// TRAIN ANIMATION
+// ═══════════════════════════════════════════
+function moveTrain(x, y) {
+  const t = document.getElementById('trainEmoji');
+  t.setAttribute('x', x);
+  t.setAttribute('y', y);
+}
+
+function updateInfo() {
+  if (!route.length) return;
+  const s   = route[trainPos];
+  const col = s.line === 'NEL' ? '#c77dff' : '#ffb347';
+  document.getElementById('infoName').textContent = s.name;
+  document.getElementById('infoName').style.color = col;
+  document.getElementById('infoCode').textContent =
+    s.isTransfer ? `${s.code}  ↔  ${PARTNER[s.code]}` : s.code;
+  const pct = Math.round((trainPos / Math.max(route.length - 1, 1)) * 100);
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressBar').style.background = s.line === 'NEL' ? NEL_COLOR : CCL_COLOR;
+}
+
+function startTrain() {
+  if (running) return;
+  route = computeRoute();
+  if (route.length < 2) return;
+  drawRouteHighlight();
+  running = true;
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').disabled  = false;
+  if (trainPos >= route.length - 1) trainPos = 0;
+  moveTrain(route[trainPos].x, route[trainPos].y);
+  updateInfo();
+  phase = 'at_station';
+  tick();
+}
+
+function tick() {
+  if (!running) return;
+  const cur = route[trainPos];
+  updateInfo();
+  const dwell = cur.isTransfer ? TRANSFER_MS : DWELL_MS;
+
+  if (cur.isTransfer) {
+    document.getElementById('infoStatus').textContent = '🔄 Transferring line…';
+    playSound('transfer');
+  } else if (trainPos === 0) {
+    document.getElementById('infoStatus').textContent = '🚉 Departing…';
+    playSound('depart');
+  } else if (cur.isEnd) {
+    document.getElementById('infoStatus').textContent = '🏁 Final destination!';
+    playSound('arrive');
+    finishRide();
+    return;
+  } else {
+    document.getElementById('infoStatus').textContent = '🚉 Arrived';
+    playSound('arrive');
+  }
+
+  timer = setTimeout(departNext, dwell);
+}
+
+function departNext() {
+  if (!running) return;
+  if (trainPos >= route.length - 1) { finishRide(); return; }
+  trainPos++;
+  const prev = route[trainPos - 1];
+  const next = route[trainPos];
+  document.getElementById('infoStatus').textContent = '🚆 Moving…';
+  playSound('move');
+  animateMove(prev.x, prev.y, next.x, next.y, MOVE_MS, () => {
+    if (running) tick();
+  });
+}
+
+function animateMove(x1, y1, x2, y2, dur, onDone) {
+  const start = performance.now();
+  function frame(now) {
+    if (!running) return;
+    const t    = Math.min((now - start) / dur, 1);
+    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    moveTrain(x1 + (x2 - x1) * ease, y1 + (y2 - y1) * ease);
+    if (t < 1) requestAnimationFrame(frame);
+    else { moveTrain(x2, y2); onDone(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function finishRide() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnStop').disabled  = true;
+  document.getElementById('infoStatus').textContent = '✅ Journey complete!';
+  playSound('arrive');
+}
+
+function stopTrain() {
+  running = false;
+  clearTimeout(timer);
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnStop').disabled  = true;
+  document.getElementById('infoStatus').textContent = '⏸ Stopped';
+}
+
+function resetTrain() {
+  stopTrain();
+  trainPos = 0;
+  route = [];
+  document.getElementById('routeHL').innerHTML = '';
+  document.getElementById('infoName').textContent = '—';
+  document.getElementById('infoCode').textContent = '';
+  document.getElementById('infoStatus').textContent = 'Select a route and press Start';
+  document.getElementById('progressBar').style.width = '0%';
+  const from = ST[fromCode];
+  if (from) moveTrain(from.x, from.y);
+  buildRouteSummary();
+}
+
+// ═══════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function playTone(freq, type, dur, vol) {
+  ensureAudio();
+  const osc  = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.type = type || 'sine';
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  gain.gain.setValueAtTime(vol || 0.12, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.start(); osc.stop(audioCtx.currentTime + dur);
+}
+function playSound(type) {
+  try {
+    if (type === 'arrive')   { playTone(660,'sine',0.3,0.12); setTimeout(()=>playTone(880,'sine',0.25,0.1),150); }
+    if (type === 'depart')   { playTone(440,'sine',0.25,0.1); setTimeout(()=>playTone(550,'sine',0.25,0.1),120); }
+    if (type === 'move')     { playTone(220,'triangle',0.18,0.06); }
+    if (type === 'transfer') { [523,659,784].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.3,0.1),i*140)); }
+  } catch(_){}
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+buildMap();
+buildDropdowns();
+const initFrom = ST[fromCode];
+if (initFrom) moveTrain(initFrom.x, initFrom.y);
+</script>
+</body>
+</html>
